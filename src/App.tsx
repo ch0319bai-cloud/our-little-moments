@@ -143,6 +143,7 @@ function App() {
             <span className="eyebrow">WORDS TO KEEP CLOSE</span>
             <p>“最好的日子，是和你一起<br className="desktop-break" />把普通过成喜欢的样子。”</p>
           </div>
+          <img className="quote-snack-usagi" src="./usagi/toast-usagi.jpg" alt="" aria-hidden="true" loading="lazy" />
           <span className="quote-heart" aria-hidden="true">♥</span>
         </section>
 
