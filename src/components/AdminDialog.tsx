@@ -22,6 +22,7 @@ export function AdminDialog({
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [isRecovery, setIsRecovery] = useState(new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery')
 
   const loadQueue = useCallback(async () => {
     if (!supabase) return
@@ -71,11 +72,11 @@ export function AdminDialog({
         return
       }
       const { data } = await supabase.auth.getSession()
-      if (active && data.session) await verifySession()
+      if (active && data.session && !isRecovery) await verifySession()
     }
     void restore()
     return () => { active = false }
-  }, [verifySession])
+  }, [verifySession, isRecovery])
 
   const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -93,6 +94,23 @@ export function AdminDialog({
     }
     const ok = await verifySession()
     if (ok) setPassword('')
+    setBusy(false)
+  }
+
+  const updatePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase) return
+    setBusy(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      setMessage('密码更新失败，请重新打开最新的重置邮件链接后再试。')
+    } else {
+      await supabase.auth.signOut()
+      window.history.replaceState(null, '', window.location.pathname + window.location.search + '#manage')
+      setIsRecovery(false)
+      setPassword('')
+      setMessage('新密码已设置，请用新密码登录。')
+    }
     setBusy(false)
   }
 
@@ -147,18 +165,27 @@ export function AdminDialog({
         {!isSignedIn ? (
           <div className="admin-login">
             <p className="eyebrow">ONLY FOR THE TWO OF YOU</p>
-            <h2 id="admin-title">管理员登录</h2>
-            <p className="dialog-intro">登录后可以审核访客投稿，决定哪些回忆放进公开相册。</p>
-            <form className="memory-form" onSubmit={signIn}>
-              <label className="field-label" htmlFor="admin-email">邮箱</label>
-              <input id="admin-email" className="text-input" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
-              <label className="field-label" htmlFor="admin-password">密码</label>
-              <input id="admin-password" className="text-input" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-              {message && <p className="form-error" role="alert">{message}</p>}
-              <button className="button button-dark submit-button" type="submit" disabled={busy}>
-                {busy ? '正在登录…' : <>进入审核台 <span aria-hidden="true">↗</span></>}
-              </button>
-            </form>
+            <h2 id="admin-title">{isRecovery ? '设置新密码' : '管理员登录'}</h2>
+            <p className="dialog-intro">{isRecovery ? '请设置一个新密码，然后返回登录。' : '登录后可以审核访客投稿，决定哪些回忆放进公开相册。'}</p>
+            {isRecovery ? (
+              <form className="memory-form" onSubmit={updatePassword}>
+                <label className="field-label" htmlFor="admin-password">新密码</label>
+                <input id="admin-password" className="text-input" type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required />
+                {message && <p className="form-error" role="alert">{message}</p>}
+                <button className="button button-dark submit-button" type="submit" disabled={busy}>{busy ? '正在保存…' : '保存新密码'}</button>
+              </form>
+            ) : (
+              <form className="memory-form" onSubmit={signIn}>
+                <label className="field-label" htmlFor="admin-email">邮箱</label>
+                <input id="admin-email" className="text-input" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                <label className="field-label" htmlFor="admin-password">密码</label>
+                <input id="admin-password" className="text-input" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+                {message && <p className="form-error" role="alert">{message}</p>}
+                <button className="button button-dark submit-button" type="submit" disabled={busy}>
+                  {busy ? '正在登录…' : <>进入审核台 <span aria-hidden="true">↗</span></>}
+                </button>
+              </form>
+            )}
           </div>
         ) : (
           <div className="review-dashboard">

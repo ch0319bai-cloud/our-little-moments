@@ -26,7 +26,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [uploadCategory, setUploadCategory] = useState<Category | null>(null)
   const [lightbox, setLightbox] = useState<MemoryItem | null>(null)
-  const [adminOpen, setAdminOpen] = useState(window.location.hash === '#manage')
+  const isRecoveryLink = () => new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery'
+  const [adminOpen, setAdminOpen] = useState(window.location.hash === '#manage' || isRecoveryLink())
 
   const loadGallery = useCallback(async () => {
     if (!supabase) {
@@ -42,7 +43,7 @@ function App() {
 
   useEffect(() => { void loadGallery() }, [loadGallery])
   useEffect(() => {
-    const handleHash = () => setAdminOpen(window.location.hash === '#manage')
+    const handleHash = () => setAdminOpen(window.location.hash === '#manage' || isRecoveryLink())
     window.addEventListener('hashchange', handleHash)
     return () => window.removeEventListener('hashchange', handleHash)
   }, [])
