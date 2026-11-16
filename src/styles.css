@@ -41,3 +41,7 @@
 .gallery-unavailable{min-height:116px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px;text-align:center;border:1px dashed #d8c6b8;border-radius:14px;color:#8b7b70;background:#fbf7f0aa}
 .gallery-unavailable strong{color:#6f5f56;font-size:12px}.gallery-unavailable span{font-size:10px;line-height:1.7}
 @media(max-width:640px){.gallery-status{margin:16px 20px 0;padding:12px 13px}.gallery-status strong{font-size:11px}.gallery-status span{font-size:9px}.gallery-status button{padding:8px 11px;font-size:9px}}
+
+.memory-image-loading{position:absolute;inset:0;background:linear-gradient(110deg,#eee7dc 20%,#f8f4ed 38%,#eee7dc 60%);background-size:200%;animation:shimmer 1.4s infinite linear}
+.memory-image-fallback{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:7px;padding:16px;text-align:center;color:#82766d;background:#f4eee5}
+.memory-image-fallback strong{font-size:11px}.memory-image-fallback small{color:#a19286;font-size:9px}
