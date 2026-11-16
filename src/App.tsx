@@ -23,6 +23,7 @@ const usagiDomePreview = [
 
 function App() {
   const [entries, setEntries] = useState<MemoryItem[]>([])
+  const [activeSection, setActiveSection] = useState<Category>('memories')
   const [isLoading, setIsLoading] = useState(true)
   const [uploadCategory, setUploadCategory] = useState<Category | null>(null)
   const [lightbox, setLightbox] = useState<MemoryItem | null>(null)
@@ -43,6 +44,17 @@ function App() {
   }, [])
 
   useEffect(() => { void loadGallery() }, [loadGallery])
+  useEffect(() => {
+    const observer = new IntersectionObserver((observations) => {
+      const visible = observations.find((observation) => observation.isIntersecting)
+      if (visible) setActiveSection(visible.target.id as Category)
+    }, { rootMargin: '-20% 0px -70% 0px' })
+    CATEGORIES.forEach((category) => {
+      const section = document.getElementById(category.id)
+      if (section) observer.observe(section)
+    })
+    return () => observer.disconnect()
+  }, [])
   useEffect(() => {
     if (!supabase) return
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -84,6 +96,7 @@ function App() {
   const domeImages = domePhotos.length ? domePhotos : usagiDomePreview
 
   return (
+    <>
     <div className="site-shell">
       <SiteHeader onUpload={() => openUpload('memories')} />
       <main>
@@ -175,6 +188,29 @@ function App() {
       {adminOpen && <AdminDialog onClose={closeAdmin} onChanged={loadGallery} recoveryMode={passwordRecovery} onRecoveryComplete={() => setPasswordRecovery(false)} />}
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
+    <SectionQuickNav activeSection={activeSection} onSelect={setActiveSection} />
+    </>
+  )
+}
+
+function SectionQuickNav({ activeSection, onSelect }: { activeSection: Category; onSelect: (section: Category) => void }) {
+  const icons = ['♡', '✿', '↗', '✦']
+  return (
+    <nav className="section-quick-nav" aria-label="快速跳转到回忆模块">
+      <span className="quick-nav-heading">我们的章节</span>
+      {CATEGORIES.map((category, index) => (
+        <a
+          className={'quick-nav-link' + (activeSection === category.id ? ' is-active' : '')}
+          href={'#' + category.id}
+          key={category.id}
+          aria-current={activeSection === category.id ? 'location' : undefined}
+          onClick={() => onSelect(category.id)}
+        >
+          <span className="quick-nav-icon" aria-hidden="true">{icons[index]}</span>
+          <span className="quick-nav-label">{category.label}</span>
+        </a>
+      ))}
+    </nav>
   )
 }
 
