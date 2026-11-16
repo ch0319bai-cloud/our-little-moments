@@ -127,11 +127,11 @@ export function UploadDialog({
     }}>
       <section className="dialog-panel upload-panel" role="dialog" aria-modal="true" aria-labelledby="upload-title">
         <button className="icon-close" onClick={onClose} aria-label="关闭" disabled={busy}>×</button>
-        <div className="dialog-topline"><span className="dialog-sticker">♡</span><span>LEAVE A LITTLE MEMORY</span></div>
+        <div className="dialog-topline"><span className="dialog-sticker">♡</span><span>SEND US A LITTLE MEMORY</span></div>
         {success ? (
           <div className="upload-success">
             <span className="success-heart" aria-hidden="true">♥</span>
-            <p className="eyebrow">SAFELY SENT</p>
+            <p className="eyebrow">YOUR MEMORY IS SAFE WITH US</p>
             <h2 id="upload-title">回忆收到啦</h2>
             <p>谢谢你把这个瞬间交给我们。审核通过后，它就会出现在对应的相册里。</p>
             <button className="button button-dark" onClick={onClose}>好呀，收下这个拥抱 <span aria-hidden="true">♡</span></button>
