@@ -22,6 +22,7 @@ export function AdminDialog({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [items, setItems] = useState<ReviewItem[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [publishedItems, setPublishedItems] = useState<ReviewItem[]>([])
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -160,6 +161,40 @@ export function AdminDialog({
     setBusy(false)
   }
 
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedIds((current) => current.size === items.length
+      ? new Set()
+      : new Set(items.map((item) => item.id)))
+  }
+
+  const bulkUpdateStatus = async (status: 'approved' | 'rejected') => {
+    if (!supabase) return
+    const ids = items.filter((item) => selectedIds.has(item.id)).map((item) => item.id)
+    if (ids.length === 0) return
+    if (status === 'rejected' && !window.confirm('确定拒绝所选的 ' + ids.length + ' 份投稿吗？')) return
+    setBusy(true)
+    setMessage('')
+    const { error } = await supabase.from('memories').update({ status }).in('id', ids)
+    if (error) {
+      setMessage('批量审核失败，请重试。')
+    } else {
+      setSelectedIds(new Set())
+      setMessage(status === 'approved' ? '已通过 ' + ids.length + ' 份投稿并公开。' : '已拒绝 ' + ids.length + ' 份投稿。')
+      await loadQueue()
+      void onChanged()
+    }
+    setBusy(false)
+  }
+
   const removeItem = async (item: ReviewItem) => {
     if (!supabase) return
     if (!window.confirm('确定删除这段回忆吗？照片或视频和记录都会被永久删除。')) return
@@ -242,11 +277,23 @@ export function AdminDialog({
                 <span>访客提交的新回忆会出现在这里。</span>
               </div>
             ) : (
+              <>
+              <div className="review-bulk-toolbar">
+                <label className="review-select-all">
+                  <input type="checkbox" checked={items.length > 0 && selectedIds.size === items.length} onChange={toggleSelectAll} disabled={busy} />
+                  <span>{selectedIds.size === items.length ? '取消全选' : '全选'}</span>
+                </label>
+                <span className="review-selection-count">已选 {selectedIds.size} 份</span>
+                <div className="review-bulk-actions">
+                  <button className="button button-small button-dark" onClick={() => void bulkUpdateStatus('approved')} disabled={busy || selectedIds.size === 0}>批量通过</button>
+                  <button className="button button-small button-soft" onClick={() => void bulkUpdateStatus('rejected')} disabled={busy || selectedIds.size === 0}>批量拒绝</button>
+                </div>
+              </div>
               <div className="review-list">
                 {items.map((item) => {
                   const category = CATEGORIES.find((value) => value.id === item.category)
                   return (
-                    <article className="review-card" key={item.id}>
+                    <article className={'review-card' + (selectedIds.has(item.id) ? ' is-selected' : '')} key={item.id}>
                       <div className="review-preview">
                         {item.previewUrl && item.media_type === 'video'
                           ? <video src={item.previewUrl} controls preload="metadata" />
@@ -255,6 +302,10 @@ export function AdminDialog({
                             : <span>预览暂不可用</span>}
                       </div>
                       <div className="review-detail">
+                        <label className="review-select">
+                          <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelected(item.id)} disabled={busy} />
+                          <span>选中这份投稿</span>
+                        </label>
                         <div className="review-meta"><span>{category?.label ?? '回忆'}</span><time>{formatDate(item.occurred_at)}</time></div>
                         <h3>{item.title}</h3>
                         {item.note && <p>{item.note}</p>}
@@ -268,6 +319,7 @@ export function AdminDialog({
                   )
                 })}
               </div>
+              </>
             )}
             <div className="review-heading" style={{ marginTop: 32 }}>
               <div>
