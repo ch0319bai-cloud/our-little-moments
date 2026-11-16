@@ -10,7 +10,7 @@ export interface MemoryItem {
   media_type: string
   media_url: string
   created_at: string
-  show_in_dome: boolean
+  show_in_dome?: boolean
 }
 
 export interface Submission {
