@@ -91,7 +91,7 @@ function App() {
   }
   const openUpload = (category: Category) => setUploadCategory(category)
   const domePhotos = entries
-    .filter((entry) => entry.media_type === 'image')
+    .filter((entry) => entry.media_type === 'image' && entry.show_in_dome)
     .map((entry) => ({ src: entry.media_url, alt: entry.title }))
   const domeImages = domePhotos.length ? domePhotos : usagiDomePreview
 
