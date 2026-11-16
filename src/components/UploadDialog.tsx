@@ -36,7 +36,7 @@ export function UploadDialog({
   const [title, setTitle] = useState('')
   const [date, setDate] = useState('')
   const [note, setNote] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [turnstileToken, setTurnstileToken] = useState('')
   const [resetCount, setResetCount] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -50,15 +50,19 @@ export function UploadDialog({
       setErrorMessage('云端相册还没有接好，完成配置后就可以投稿啦。')
       return
     }
-    if (!file) {
-      setErrorMessage('先选一张照片或一段视频吧。')
+    if (!files.length) {
+      setErrorMessage('请至少选择一张照片或一段视频。')
       return
     }
-    if (!allowedTypes.includes(file.type)) {
-      setErrorMessage('支持 JPG、PNG、WebP、GIF、MP4 和 WebM 格式。')
+    if (files.length > 10) {
+      setErrorMessage('一次最多选择 10 个文件。')
       return
     }
-    if (file.size > maxBytes) {
+    if (files.some((file) => !allowedTypes.includes(file.type))) {
+      setErrorMessage('所有文件都需为 JPG、PNG、WebP、GIF、MP4 或 WebM 格式。')
+      return
+    }
+    if (files.some((file) => file.size > maxBytes)) {
       setErrorMessage('单个文件请控制在 50 MB 以内。')
       return
     }
@@ -71,46 +75,41 @@ export function UploadDialog({
     try {
       const { data: prepared, error: prepareError } = await supabase.functions.invoke('public-submit', {
         body: {
-          action: 'prepare',
+          action: 'prepareBatch',
           category,
           title: title.trim(),
           occurredAt: date || null,
           note: note.trim(),
-          mimeType: file.type,
-          fileSize: file.size,
+          files: files.map((file) => ({ mimeType: file.type, fileSize: file.size })),
           turnstileToken,
         },
       })
       if (prepareError) throw new Error(prepareError.message)
-      if (!prepared?.intentId || !prepared?.path || !prepared?.token) {
+      if (!Array.isArray(prepared?.uploads) || prepared.uploads.length !== files.length) {
         throw new Error(prepared?.error || '暂时无法准备上传，请稍后再试。')
       }
 
-      const { error: uploadError } = await supabase.storage
-        .from('couple-memories')
-        .uploadToSignedUrl(prepared.path, prepared.token, file, {
+      for (const [index, file] of files.entries()) {
+        const upload = prepared.uploads[index]
+        const { error: uploadError } = await supabase.storage.from('couple-memories').uploadToSignedUrl(upload.path, upload.token, file, {
           contentType: file.type,
           upsert: false,
         })
-      if (uploadError) {
-        await supabase.functions.invoke('public-submit', {
-          body: { action: 'cancel', intentId: prepared.intentId },
+        if (uploadError) {
+          await supabase.functions.invoke('public-submit', { body: { action: 'cancel', intentId: upload.intentId } })
+          throw new Error(uploadError.message)
+        }
+        const { data: finalized, error: finalizeError } = await supabase.functions.invoke('public-submit', {
+          body: { action: 'finalize', intentId: upload.intentId },
         })
-        throw new Error(uploadError.message)
-      }
-
-      const { data: finalized, error: finalizeError } = await supabase.functions.invoke('public-submit', {
-        body: { action: 'finalize', intentId: prepared.intentId },
-      })
-      if (finalizeError || finalized?.error) {
-        await supabase.functions.invoke('public-submit', {
-          body: { action: 'cancel', intentId: prepared.intentId },
-        })
-        throw new Error(finalized?.error || finalizeError?.message || '提交没有完成，请再试一次。')
+        if (finalizeError || finalized?.error) {
+          await supabase.functions.invoke('public-submit', { body: { action: 'cancel', intentId: upload.intentId } })
+          throw new Error(finalized?.error || finalizeError?.message || '提交没有完成，请再试一次。')
+        }
       }
 
       setSuccess(true)
-      setFile(null)
+      setFiles([])
       setTurnstileToken('')
       void onSubmitted()
     } catch (error) {
@@ -174,19 +173,20 @@ export function UploadDialog({
                 </div>
                 <div className="field-column">
                   <label className="field-label" htmlFor="memory-file">照片或视频 <span>必填</span></label>
-                  <label className={file ? 'file-pick has-file' : 'file-pick'} htmlFor="memory-file">
-                    <span aria-hidden="true">{file ? '✓' : '＋'}</span>
-                    <span>{file ? file.name : '选择一个文件'}</span>
+                  <label className={files.length ? 'file-pick has-file' : 'file-pick'} htmlFor="memory-file">
+                    <span aria-hidden="true">{files.length ? '✓' : '＋'}</span>
+                    <span>{files.length ? `已选择 ${files.length} 个文件：${files.map((file) => file.name).join('、')}` : '选择多个文件'}</span>
                   </label>
                   <input
                     id="memory-file"
                     type="file"
                     className="visually-hidden"
                     accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"
-                    onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                    multiple
+                    onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
                     required
                   />
-                  <small className="field-hint">JPG、PNG、WebP、GIF、MP4 或 WebM，最多 50 MB</small>
+                  <small className="field-hint">可多选 JPG、PNG、WebP、GIF、MP4 或 WebM；一次最多 10 个，每个不超过 50 MB</small>
                 </div>
               </div>
 
@@ -272,3 +272,4 @@ function TurnstileWidget({
 
   return <div ref={container} className="turnstile-widget" />
 }
+
