@@ -29,3 +29,6 @@
 
 .section-heading h2.section-title-line{display:flex;align-items:center;gap:10px;letter-spacing:-.05em}.section-title-usagi{width:46px;height:46px;flex:none;object-fit:cover;object-position:center;border:3px solid #fffdf9;border-radius:15px;background:#f8e7bd;box-shadow:0 5px 14px #45352b1c}.section-title-usagi.usagi-games{object-position:center 86%}
 @media(max-width:640px){.section-heading h2.section-title-line{gap:7px}.section-title-usagi{width:38px;height:38px;border-width:2px;border-radius:12px}}
+
+.quote-snack-usagi{position:absolute;right:7%;bottom:0;width:68px;height:68px;object-fit:contain;opacity:.93;filter:drop-shadow(0 5px 5px #45352b18);pointer-events:none}.quote-heart{position:relative;z-index:1}
+@media(max-width:640px){.quote-snack-usagi{right:4px;bottom:0;width:47px;height:47px;opacity:.82}}
