@@ -114,7 +114,6 @@ function App() {
             <div className="hero-image-wrap">
               <img src="./usagi/sunset-usagi.jpg" alt="乌萨奇在夕阳下的花坡" className="hero-image" />
               <div className="hero-image-shade" />
-              <div className="image-caption"><span className="caption-sparkle">✳</span><span>和你一起，平凡也闪闪发光</span></div>
             </div>
             <img className="floating-usagi hero-sticker" src="./usagi/peek-usagi.jpg" alt="" />
             <span className="hero-doodle doodle-star" aria-hidden="true">✳</span>
@@ -144,6 +143,7 @@ function App() {
             <span className="eyebrow">WORDS TO KEEP CLOSE</span>
             <p>“最好的日子，是和你一起<br className="desktop-break" />把普通过成喜欢的样子。”</p>
           </div>
+          <img className="quote-snack-usagi" src="./usagi/toast-usagi.jpg" alt="" aria-hidden="true" loading="lazy" />
           <span className="quote-heart" aria-hidden="true">♥</span>
         </section>
 
