@@ -25,6 +25,7 @@ export function AdminDialog({
   const [items, setItems] = useState<ReviewItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [domeSelection, setDomeSelection] = useState<Set<string>>(() => new Set())
+  const [hasDomeColumn, setHasDomeColumn] = useState(false)
   const [publishedItems, setPublishedItems] = useState<ReviewItem[]>([])
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -40,11 +41,23 @@ export function AdminDialog({
     if (!supabase) return
     const client = supabase
     setLoading(true)
-    const { data, error } = await client
+    let { data, error } = await client
       .from('memories')
       .select('id,category,title,note,occurred_at,media_type,media_path,created_at,show_in_dome')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
+    if (error) {
+      const fallback = await client
+        .from('memories')
+        .select('id,category,title,note,occurred_at,media_type,media_path,created_at')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      data = fallback.data as typeof data
+      error = fallback.error
+      setHasDomeColumn(false)
+    } else {
+      setHasDomeColumn(true)
+    }
     if (error) {
       setMessage('暂时无法读取待审核投稿，请确认管理员权限已配置。')
       setItems([])
@@ -55,7 +68,7 @@ export function AdminDialog({
       const { data: signed } = await client.storage
         .from('couple-memories')
         .createSignedUrl(item.media_path, 60 * 60)
-      return { ...item, previewUrl: signed?.signedUrl ?? null } as ReviewItem
+      return { ...item, show_in_dome: item.show_in_dome === true, previewUrl: signed?.signedUrl ?? null } as ReviewItem
     }))
     setItems(previews)
     setSelectedIds((current) => new Set([...current].filter((id) => previews.some((item) => item.id === id))))
@@ -67,11 +80,23 @@ export function AdminDialog({
     if (!supabase) return
     const client = supabase
     setLoading(true)
-    const { data, error } = await client
+    let { data, error } = await client
       .from('memories')
       .select('id,category,title,note,occurred_at,media_type,media_path,created_at,show_in_dome')
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
+    if (error) {
+      const fallback = await client
+        .from('memories')
+        .select('id,category,title,note,occurred_at,media_type,media_path,created_at')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+      data = fallback.data as typeof data
+      error = fallback.error
+      setHasDomeColumn(false)
+    } else {
+      setHasDomeColumn(true)
+    }
     if (error) {
       setMessage('暂时无法读取已公开的回忆。')
       setPublishedItems([])
@@ -155,10 +180,10 @@ export function AdminDialog({
   const updateStatus = async (item: ReviewItem, status: 'approved' | 'rejected') => {
     if (!supabase) return
     setBusy(true)
-    const { error } = await supabase.from('memories').update({
-      status,
-      show_in_dome: status === 'approved' && item.media_type === 'image' && domeSelection.has(item.id),
-    }).eq('id', item.id)
+    const changes = hasDomeColumn
+      ? { status, show_in_dome: status === 'approved' && item.media_type === 'image' && domeSelection.has(item.id) }
+      : { status }
+    const { error } = await supabase.from('memories').update(changes).eq('id', item.id)
     if (error) setMessage('保存失败，请重试。')
     else {
       setMessage(status === 'approved' ? '这段回忆已经公开啦。' : '投稿已放入拒绝区。')
@@ -192,7 +217,9 @@ export function AdminDialog({
     setMessage('')
     const domeIds = ids.filter((id) => domeSelection.has(id))
     const regularIds = ids.filter((id) => !domeSelection.has(id))
-    const updates = status === 'approved'
+    const updates = !hasDomeColumn
+      ? [await supabase.from('memories').update({ status }).in('id', ids)]
+      : status === 'approved'
       ? await Promise.all([
           ...(domeIds.length ? [supabase.from('memories').update({ status, show_in_dome: true }).in('id', domeIds)] : []),
           ...(regularIds.length ? [supabase.from('memories').update({ status, show_in_dome: false }).in('id', regularIds)] : []),
@@ -220,7 +247,7 @@ export function AdminDialog({
   }
 
   const togglePublishedDome = async (item: ReviewItem) => {
-    if (!supabase || item.media_type !== 'image') return
+    if (!supabase || !hasDomeColumn || item.media_type !== 'image') return
     const showInDome = !item.show_in_dome
     setBusy(true)
     const { error } = await supabase.from('memories').update({ show_in_dome: showInDome }).eq('id', item.id).eq('status', 'approved')
@@ -344,8 +371,8 @@ export function AdminDialog({
                       </div>
                       <div className="review-detail">
                         <label className="review-dome-choice">
-                          <input type="checkbox" checked={domeSelection.has(item.id)} onChange={() => toggleDomeSelection(item.id)} disabled={busy || item.media_type !== 'image'} />
-                          <span>加入穹顶照片集</span>
+                          <input type="checkbox" checked={hasDomeColumn && domeSelection.has(item.id)} onChange={() => toggleDomeSelection(item.id)} disabled={busy || !hasDomeColumn || item.media_type !== 'image'} />
+                          <span>{hasDomeColumn ? '加入穹顶照片集' : '完成数据库配置后可选入穹顶'}</span>
                         </label>
                         <label className="review-select">
                           <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelected(item.id)} disabled={busy} />
@@ -390,8 +417,8 @@ export function AdminDialog({
                       </div>
                       <div className="review-detail">
                         <label className="review-dome-choice">
-                          <input type="checkbox" checked={item.show_in_dome} onChange={() => void togglePublishedDome(item)} disabled={busy || item.media_type !== 'image'} />
-                          <span>{item.show_in_dome ? '已加入穹顶照片集' : item.media_type === 'image' ? '加入穹顶照片集' : '穹顶只展示照片'}</span>
+                          <input type="checkbox" checked={hasDomeColumn && item.show_in_dome} onChange={() => void togglePublishedDome(item)} disabled={busy || !hasDomeColumn || item.media_type !== 'image'} />
+                          <span>{!hasDomeColumn ? '完成数据库配置后可管理穹顶照片' : item.show_in_dome ? '已加入穹顶照片集' : item.media_type === 'image' ? '加入穹顶照片集' : '穹顶只展示照片'}</span>
                         </label>
                         <div className="review-meta"><span>{category?.label ?? '回忆'}</span><time>{formatDate(item.occurred_at)}</time></div>
                         <h3>{item.title}</h3>
