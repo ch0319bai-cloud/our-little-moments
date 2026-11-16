@@ -11,9 +11,13 @@ interface ReviewItem extends Submission {
 export function AdminDialog({
   onClose,
   onChanged,
+  recoveryMode = false,
+  onRecoveryComplete,
 }: {
   onClose: () => void
   onChanged: () => Promise<void>
+  recoveryMode?: boolean
+  onRecoveryComplete?: () => void
 }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,7 +26,11 @@ export function AdminDialog({
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [isRecovery, setIsRecovery] = useState(new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery')
+  const [isRecovery, setIsRecovery] = useState(recoveryMode || new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery')
+
+  useEffect(() => {
+    if (recoveryMode) setIsRecovery(true)
+  }, [recoveryMode])
 
   const loadQueue = useCallback(async () => {
     if (!supabase) return
@@ -108,6 +116,7 @@ export function AdminDialog({
       await supabase.auth.signOut()
       window.history.replaceState(null, '', window.location.pathname + window.location.search + '#manage')
       setIsRecovery(false)
+      onRecoveryComplete?.()
       setPassword('')
       setMessage('新密码已设置，请用新密码登录。')
     }
@@ -248,3 +257,4 @@ function formatDate(value: string | null) {
     ? '未填写日期'
     : new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(date)
 }
+
