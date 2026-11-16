@@ -157,6 +157,66 @@ Deno.serve(async (request) => {
       }, headers);
     }
 
+    if (action === "prepareBatch") {
+      const challengeOk = await verifyChallenge(
+        String(payload.turnstileToken ?? ""),
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!challengeOk) return json(400, { error: "验证未通过，请重新验证后再试。" }, headers);
+
+      const category = String(payload.category ?? "");
+      const title = String(payload.title ?? "").trim();
+      const note = String(payload.note ?? "").trim();
+      const occurredAt = payload.occurredAt ? String(payload.occurredAt) : null;
+      const files = Array.isArray(payload.files) ? payload.files : [];
+      if (!CATEGORIES.has(category)) return json(400, { error: "请选择一个相册分类。" }, headers);
+      if (!title || title.length > 100) return json(400, { error: "标题需为 1 到 100 个字符。" }, headers);
+      if (note.length > 600) return json(400, { error: "说明不能超过 600 个字符。" }, headers);
+      if (occurredAt && !/^\d{4}-\d{2}-\d{2}$/.test(occurredAt)) {
+        return json(400, { error: "日期格式不正确。" }, headers);
+      }
+      if (files.length < 1 || files.length > 10) return json(400, { error: "一次最多选择 10 个文件。" }, headers);
+      for (const file of files) {
+        const mimeType = String(file.mimeType ?? "").toLowerCase();
+        const fileSize = Number(file.fileSize);
+        if (!MIME_EXTENSIONS[mimeType] || !Number.isFinite(fileSize) || fileSize <= 0 || fileSize > MAX_BYTES) {
+          return json(400, { error: "仅支持 JPG、PNG、WebP、GIF、MP4 或 WebM，单个文件不超过 50 MB。" }, headers);
+        }
+      }
+
+      await cleanExpiredIntents();
+      const uploads: { intentId: string; path: string; token: string; mediaPath: string }[] = [];
+      for (const file of files) {
+        const mimeType = String(file.mimeType).toLowerCase();
+        const extension = MIME_EXTENSIONS[mimeType];
+        const mediaPath = category + "/" + crypto.randomUUID() + "." + extension;
+        const { data: signed, error: signError } = await admin.storage
+          .from(BUCKET)
+          .createSignedUploadUrl(mediaPath, { upsert: false });
+        if (signError || !signed) throw signError ?? new Error("Could not prepare upload.");
+
+        const { data: intent, error: insertError } = await admin
+          .from("upload_intents")
+          .insert({
+            category,
+            title,
+            note: note || null,
+            occurred_at: occurredAt,
+            media_type: mimeType.startsWith("video/") ? "video" : "image",
+            media_path: mediaPath,
+            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          })
+          .select("id")
+          .single();
+        if (insertError || !intent) throw insertError ?? new Error("Could not create upload intent.");
+        uploads.push({ intentId: intent.id, path: signed.path, token: signed.token, mediaPath });
+      }
+
+      return json(200, {
+        uploads: uploads.map(({ intentId, path, token }) => ({ intentId, path, token })),
+      }, headers);
+    }
+
     if (action === "finalize") {
       const intentId = String(payload.intentId ?? "");
       if (!/^[0-9a-f-]{36}$/i.test(intentId)) {
