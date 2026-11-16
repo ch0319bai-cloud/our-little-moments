@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AdminDialog } from './components/AdminDialog'
 import { UploadDialog } from './components/UploadDialog'
@@ -6,6 +6,30 @@ import DomeGallery from './components/DomeGallery'
 import { supabase } from './lib/supabase'
 import { CATEGORIES } from './types'
 import type { Category, MemoryItem } from './types'
+
+const GALLERY_CACHE_KEY = 'our-little-moments-gallery-v1'
+const GALLERY_CACHE_MAX_AGE = 45 * 60 * 1000
+
+function readGalleryCache(): MemoryItem[] | null {
+  try {
+    const raw = window.localStorage.getItem(GALLERY_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw) as { savedAt?: number; entries?: unknown }
+    const age = Date.now() - (cached.savedAt ?? 0)
+    if (age < 0 || age > GALLERY_CACHE_MAX_AGE || !Array.isArray(cached.entries)) return null
+    return cached.entries as MemoryItem[]
+  } catch {
+    return null
+  }
+}
+
+function writeGalleryCache(entries: MemoryItem[]) {
+  try {
+    window.localStorage.setItem(GALLERY_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), entries }))
+  } catch {
+    // Gallery loading should still work when browser storage is unavailable.
+  }
+}
 
 const usagiByCategory: Record<Category, string> = {
   memories: './usagi/usagi-bouquet.jpg',
@@ -25,6 +49,8 @@ function App() {
   const [entries, setEntries] = useState<MemoryItem[]>([])
   const [activeSection, setActiveSection] = useState<Category>('memories')
   const [isLoading, setIsLoading] = useState(true)
+  const [galleryError, setGalleryError] = useState(false)
+  const hasGalleryLoaded = useRef(false)
   const [uploadCategory, setUploadCategory] = useState<Category | null>(null)
   const [lightbox, setLightbox] = useState<MemoryItem | null>(null)
   const isRecoveryLink = () => new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery'
@@ -32,18 +58,52 @@ function App() {
   const [adminOpen, setAdminOpen] = useState(window.location.hash === '#manage' || isRecoveryLink())
 
   const loadGallery = useCallback(async () => {
+    const cachedEntries = readGalleryCache()
+    if (cachedEntries) {
+      setEntries(cachedEntries)
+      hasGalleryLoaded.current = true
+      setIsLoading(false)
+    } else if (!hasGalleryLoaded.current) {
+      setIsLoading(true)
+    }
+    setGalleryError(false)
+
     if (!supabase) {
-      setEntries([])
+      setGalleryError(true)
       setIsLoading(false)
       return
     }
-    setIsLoading(true)
-    const { data, error } = await supabase.functions.invoke('public-gallery', { body: {} })
-    if (!error && Array.isArray(data?.entries)) setEntries(data.entries as MemoryItem[])
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const { data, error } = await supabase.functions.invoke('public-gallery', { body: {} })
+        if (error) throw error
+        if (!Array.isArray(data?.entries)) throw new Error('Gallery response is unavailable.')
+
+        const nextEntries = data.entries as MemoryItem[]
+        setEntries(nextEntries)
+        writeGalleryCache(nextEntries)
+        hasGalleryLoaded.current = true
+        setGalleryError(false)
+        setIsLoading(false)
+        return
+      } catch {
+        if (attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 600 : 1400))
+        }
+      }
+    }
+
+    setGalleryError(true)
     setIsLoading(false)
   }, [])
 
   useEffect(() => { void loadGallery() }, [loadGallery])
+  useEffect(() => {
+    const retryWhenOnline = () => { void loadGallery() }
+    window.addEventListener('online', retryWhenOnline)
+    return () => window.removeEventListener('online', retryWhenOnline)
+  }, [loadGallery])
   useEffect(() => {
     const observer = new IntersectionObserver((observations) => {
       const visible = observations.find((observation) => observation.isIntersecting)
@@ -147,6 +207,14 @@ function App() {
           <span className="quote-heart" aria-hidden="true">♥</span>
         </section>
 
+        {galleryError && <div className="gallery-status" role="status">
+          <div>
+            <strong>{entries.length ? '暂时无法更新云端相册' : '暂时无法连接云端相册'}</strong>
+            <span>{entries.length ? '先显示最近成功加载的回忆。' : '回忆仍保存在云端，没有被删除。'}</span>
+          </div>
+          <button onClick={() => { void loadGallery() }}>重新加载</button>
+        </div>}
+
         <div className="gallery-sections">
           {CATEGORIES.map((category, index) => (
             <GallerySection
@@ -155,6 +223,7 @@ function App() {
               index={index}
               entries={entries.filter((entry) => entry.category === category.id)}
               loading={isLoading}
+              unavailable={galleryError && entries.length === 0}
               onUpload={() => openUpload(category.id)}
               onOpen={setLightbox}
             />
@@ -230,12 +299,13 @@ function SiteHeader({ onUpload }: { onUpload: () => void }) {
 }
 
 function GallerySection({
-  category, index, entries, loading, onUpload, onOpen,
+  category, index, entries, loading, unavailable, onUpload, onOpen,
 }: {
   category: (typeof CATEGORIES)[number]
   index: number
   entries: MemoryItem[]
   loading: boolean
+  unavailable: boolean
   onUpload: () => void
   onOpen: (entry: MemoryItem) => void
 }) {
@@ -255,6 +325,7 @@ function GallerySection({
         </div>
 
         {loading ? <div className="loading-grid" aria-label="正在加载相册"><span /><span /><span /></div> :
+          unavailable ? <div className="gallery-unavailable"><strong>暂时读不到云端相册</strong><span>网络恢复后可重新加载，回忆还在云端保存着。</span></div> :
           entries.length > 0 ? <div className="memory-grid">
             {entries.map((entry) => <MemoryCard entry={entry} key={entry.id} onOpen={() => onOpen(entry)} />)}
           </div> :
