@@ -38,7 +38,7 @@ Deno.serve(async (request) => {
   try {
     const { data, error } = await admin
       .from("memories")
-      .select("id,category,title,note,occurred_at,media_type,media_path,created_at")
+      .select("id,category,title,note,occurred_at,media_type,media_path,created_at,show_in_dome")
       .eq("status", "approved")
       .order("occurred_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
@@ -59,6 +59,7 @@ Deno.serve(async (request) => {
         media_type: item.media_type,
         media_url: signed.signedUrl,
         created_at: item.created_at,
+        show_in_dome: item.show_in_dome,
       };
     }));
 
