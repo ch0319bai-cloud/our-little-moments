@@ -353,7 +353,7 @@ function MemoryCard({ entry, onOpen }: { entry: MemoryItem; onOpen: () => void }
       <div className="memory-media">
         {entry.media_type === 'video'
           ? <video src={entry.media_url} preload="metadata" muted playsInline />
-          : <img src={entry.media_url} alt={entry.title} loading="lazy" />}
+          : <img src={entry.media_url} alt={entry.title} loading="lazy" decoding="async" />}
         {entry.media_type === 'video' && <span className="video-indicator" aria-hidden="true">▶ 视频</span>}
       </div>
       <div className="memory-card-copy">
