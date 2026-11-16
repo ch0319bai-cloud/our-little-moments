@@ -186,7 +186,7 @@ function SiteHeader({ onUpload }: { onUpload: () => void }) {
         <span className="brand-name">我们的日常<span>LOVE NOTES</span></span>
       </a>
       <nav className="main-nav" aria-label="主导航">
-        <a href="#top">首页</a><a href="#memories">回忆</a><a href="#portraits">她的镜头</a><a href="#meetups">见面车票</a><a href="#games">游戏时光</a>
+        <a href="#top">首页</a><a href="#memories">我和宝宝</a><a href="#portraits">美丽的宝宝</a><a href="#meetups">每一次相见</a><a href="#games">未见面的日子</a>
       </nav>
       <button className="header-add" onClick={onUpload}><span aria-hidden="true">＋</span> 留下回忆</button>
     </header>
