@@ -180,7 +180,7 @@ function App() {
         <p>把想念收好，把见面记牢。 <span aria-hidden="true">♡</span></p>
         <div className="footer-right">
           <button className="admin-link" onClick={openAdmin}>小小管理员 <span aria-hidden="true">↗</span></button>
-          <span className="copyright">© {new Date().getFullYear()} made with love</span>
+          <span className="copyright">© {new Date().getFullYear()} made for us</span>
         </div>
       </footer>
 
@@ -219,7 +219,7 @@ function SiteHeader({ onUpload }: { onUpload: () => void }) {
     <header className="site-header">
       <a href="#top" className="brand" aria-label="回到首页">
         <span className="brand-mark"><img src="./usagi/mascot.jpg" alt="" /></span>
-        <span className="brand-name">我们的日常<span>LOVE NOTES</span></span>
+        <span className="brand-name">我们的日常<span>A JOURNAL FOR TWO</span></span>
       </a>
       <nav className="main-nav" aria-label="主导航">
         <a href="#top">首页</a><a href="#memories">我和宝宝</a><a href="#portraits">美丽的宝宝</a><a href="#meetups">每一次相见</a><a href="#games">未见面的日子</a>
