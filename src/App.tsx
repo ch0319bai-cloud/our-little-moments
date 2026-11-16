@@ -27,6 +27,7 @@ function App() {
   const [uploadCategory, setUploadCategory] = useState<Category | null>(null)
   const [lightbox, setLightbox] = useState<MemoryItem | null>(null)
   const isRecoveryLink = () => new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery'
+  const [passwordRecovery, setPasswordRecovery] = useState(isRecoveryLink())
   const [adminOpen, setAdminOpen] = useState(window.location.hash === '#manage' || isRecoveryLink())
 
   const loadGallery = useCallback(async () => {
@@ -42,6 +43,16 @@ function App() {
   }, [])
 
   useEffect(() => { void loadGallery() }, [loadGallery])
+  useEffect(() => {
+    if (!supabase) return
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true)
+        setAdminOpen(true)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
   useEffect(() => {
     const handleHash = () => setAdminOpen(window.location.hash === '#manage' || isRecoveryLink())
     window.addEventListener('hashchange', handleHash)
@@ -161,7 +172,7 @@ function App() {
       </footer>
 
       {uploadCategory && <UploadDialog initialCategory={uploadCategory} onClose={() => setUploadCategory(null)} onSubmitted={loadGallery} />}
-      {adminOpen && <AdminDialog onClose={closeAdmin} onChanged={loadGallery} />}
+      {adminOpen && <AdminDialog onClose={closeAdmin} onChanged={loadGallery} recoveryMode={passwordRecovery} onRecoveryComplete={() => setPasswordRecovery(false)} />}
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   )
@@ -271,3 +282,4 @@ function formatDate(value: string | null) {
 }
 
 export default App
+
