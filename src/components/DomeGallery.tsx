@@ -41,7 +41,7 @@ const wrapAngle = (value: number) => {
 }
 
 function buildItems(images: DomeImage[], segments: number): Tile[] {
-  const columns = Array.from({ length: segments }, (_, index) => -37 + index * (74 / Math.max(1, segments - 1)))
+  const columns = Array.from({ length: segments }, (_, index) => -37 + index * 2)
   const coordinates = columns.flatMap((x, column) => {
     const rows = column % 2 === 0 ? [-4, -2, 0, 2, 4] : [-3, -1, 1, 3, 5]
     return rows.map((y) => ({ x, y, sizeX: 2, sizeY: 2 }))
@@ -252,3 +252,4 @@ export default function DomeGallery({
     </div>
   )
 }
+
