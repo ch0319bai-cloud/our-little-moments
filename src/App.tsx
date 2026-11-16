@@ -102,12 +102,12 @@ function App() {
       <main>
         <section className="hero" id="top">
           <div className="hero-copy">
-            <span className="eyebrow"><span className="eyebrow-dot" /> A LITTLE SPACE JUST FOR US</span>
+            <span className="eyebrow"><span className="eyebrow-dot" /> A LOVE STORY, STILL UNFOLDING</span>
             <h1>把小小瞬间<br /><em>收进我们的故事</em></h1>
             <p className="hero-description">从远距离的想念，到并肩走过的日常。<br />每一页，都有我们。</p>
             <div className="hero-actions">
               <a className="button button-dark" href="#memories">翻开回忆 <span aria-hidden="true">↘</span></a>
-              <span className="hero-note"><span aria-hidden="true">♡</span> Our days, our way</span>
+              <span className="hero-note"><span aria-hidden="true">♡</span> One day, one memory, all ours</span>
             </div>
           </div>
           <div className="hero-art">
@@ -119,13 +119,13 @@ function App() {
             <img className="floating-usagi hero-sticker" src="./usagi/peek-usagi.jpg" alt="" />
             <span className="hero-doodle doodle-star" aria-hidden="true">✳</span>
             <span className="hero-doodle doodle-heart" aria-hidden="true">♡</span>
-            <span className="hero-pill"><span className="pill-dot" /> OUR LITTLE JOURNAL</span>
+            <span className="hero-pill"><span className="pill-dot" /> OUR LOVE JOURNAL</span>
           </div>
           <a className="scroll-cue" href="#chapters" aria-label="向下浏览"><span>↓</span></a>
         </section>
 
         <section className="chapter-strip" id="chapters" aria-label="回忆分类">
-          <div className="section-kicker">THE CHAPTERS <span>·</span> 我们的四个小角落</div>
+          <div className="section-kicker">OUR FOUR CHAPTERS <span>·</span> 我们的四个小角落</div>
           <div className="chapter-grid">
             {CATEGORIES.map((category, index) => (
               <a className={'chapter-card chapter-' + category.id} href={'#' + category.id} key={category.id}>
@@ -141,7 +141,7 @@ function App() {
         <section className="quote-band">
           <img src="./usagi/mascot.jpg" alt="" className="quote-mascot" />
           <div className="quote-copy">
-            <span className="eyebrow">A NOTE FOR US</span>
+            <span className="eyebrow">WORDS TO KEEP CLOSE</span>
             <p>“最好的日子，是和你一起<br className="desktop-break" />把普通过成喜欢的样子。”</p>
           </div>
           <span className="quote-heart" aria-hidden="true">♥</span>
@@ -175,7 +175,7 @@ function App() {
       <footer className="site-footer">
         <a className="footer-brand" href="#top">
           <img src="./usagi/mascot.jpg" alt="" />
-          <span>我们的日常<small>OUR LITTLE JOURNAL</small></span>
+          <span>我们的日常<small>OUR LOVE JOURNAL</small></span>
         </a>
         <p>把想念收好，把见面记牢。 <span aria-hidden="true">♡</span></p>
         <div className="footer-right">
@@ -262,7 +262,7 @@ function GallerySection({
               <img src={usagiByCategory[category.id]} alt="" className={'empty-usagi empty-usagi-' + category.id} />
             </div>
             <div className="empty-copy">
-              <span className="empty-tag">A LITTLE SPACE FOR THIS STORY</span>
+              <span className="empty-tag">A PLACE FOR THE NEXT MEMORY</span>
               <h3>{category.id === 'meetups' ? '下一张车票，留给下一次见面' : '这里还空着一个位置'}</h3>
               <p>{category.id === 'meetups' ? '把车票和那天的心情一起收好。' : '等第一份回忆到来，我们就把它好好珍藏。'}</p>
               <button className="text-button" onClick={onUpload}>放进第一份回忆 <span aria-hidden="true">↗</span></button>
