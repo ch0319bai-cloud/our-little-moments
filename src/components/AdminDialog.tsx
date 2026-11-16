@@ -56,6 +56,7 @@ export function AdminDialog({
       return { ...item, previewUrl: signed?.signedUrl ?? null } as ReviewItem
     }))
     setItems(previews)
+    setSelectedIds((current) => new Set([...current].filter((id) => previews.some((item) => item.id === id))))
     setLoading(false)
   }, [])
 
@@ -219,6 +220,7 @@ export function AdminDialog({
     if (supabase) await supabase.auth.signOut()
     setIsSignedIn(false)
     setItems([])
+    setSelectedIds(new Set())
     setPublishedItems([])
     setMessage('已安全退出。')
   }
