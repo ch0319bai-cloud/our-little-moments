@@ -225,6 +225,7 @@ function App() {
               loading={isLoading}
               unavailable={galleryError && entries.length === 0}
               onUpload={() => openUpload(category.id)}
+              onRetry={() => { void loadGallery() }}
               onOpen={setLightbox}
             />
           ))}
@@ -299,7 +300,7 @@ function SiteHeader({ onUpload }: { onUpload: () => void }) {
 }
 
 function GallerySection({
-  category, index, entries, loading, unavailable, onUpload, onOpen,
+  category, index, entries, loading, unavailable, onUpload, onRetry, onOpen,
 }: {
   category: (typeof CATEGORIES)[number]
   index: number
@@ -307,6 +308,7 @@ function GallerySection({
   loading: boolean
   unavailable: boolean
   onUpload: () => void
+  onRetry: () => void
   onOpen: (entry: MemoryItem) => void
 }) {
   return (
@@ -327,7 +329,7 @@ function GallerySection({
         {loading ? <div className="loading-grid" aria-label="正在加载相册"><span /><span /><span /></div> :
           unavailable ? <div className="gallery-unavailable"><strong>暂时读不到云端相册</strong><span>网络恢复后可重新加载，回忆还在云端保存着。</span></div> :
           entries.length > 0 ? <div className="memory-grid">
-            {entries.map((entry) => <MemoryCard entry={entry} key={entry.id} onOpen={() => onOpen(entry)} />)}
+            {entries.map((entry) => <MemoryCard entry={entry} key={entry.id} onOpen={() => onOpen(entry)} onRetry={onRetry} />)}
           </div> :
           <div className="empty-card">
             <div className="empty-art-wrap">
@@ -347,13 +349,29 @@ function GallerySection({
   )
 }
 
-function MemoryCard({ entry, onOpen }: { entry: MemoryItem; onOpen: () => void }) {
+function MemoryCard({ entry, onOpen, onRetry }: { entry: MemoryItem; onOpen: () => void; onRetry: () => void }) {
+  const [mediaFailed, setMediaFailed] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState(false)
+
+  useEffect(() => {
+    setMediaFailed(false)
+    setImageLoaded(false)
+  }, [entry.media_url])
+
+  const handleClick = () => {
+    if (mediaFailed) onRetry()
+    else onOpen()
+  }
+
   return (
-    <button className="memory-card" onClick={onOpen} aria-label={'查看：' + entry.title}>
+    <button className="memory-card" onClick={handleClick} aria-label={(mediaFailed ? '重新加载照片：' : '查看：') + entry.title}>
       <div className="memory-media">
+        {entry.media_type === 'image' && !imageLoaded && !mediaFailed && <span className="memory-image-loading" aria-hidden="true" />}
         {entry.media_type === 'video'
           ? <video src={entry.media_url} preload="metadata" muted playsInline />
-          : <img src={entry.media_url} alt={entry.title} loading="lazy" decoding="async" />}
+          : mediaFailed
+            ? <span className="memory-image-fallback"><strong>照片暂时没加载出来</strong><small>点击这里重新加载</small></span>
+            : <img src={entry.media_url} alt={entry.title} loading="lazy" decoding="async" onLoad={() => setImageLoaded(true)} onError={() => setMediaFailed(true)} />}
         {entry.media_type === 'video' && <span className="video-indicator" aria-hidden="true">▶ 视频</span>}
       </div>
       <div className="memory-card-copy">
