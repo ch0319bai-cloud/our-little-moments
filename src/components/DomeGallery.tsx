@@ -222,7 +222,7 @@ export default function DomeGallery({
                     onClick={() => openImage(item)}
                     aria-label={item.alt ? '查看：' + item.alt : '放大查看照片'}
                   >
-                    <img src={item.src} alt={item.alt ?? ''} draggable={false} loading="lazy" />
+                    <img src={item.src} alt={item.alt ?? ''} draggable={false} loading="lazy" decoding="async" />
                   </button>
                 </div>
               )
