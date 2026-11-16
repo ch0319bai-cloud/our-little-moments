@@ -6,6 +6,7 @@ import type { Submission } from '../types'
 
 interface ReviewItem extends Submission {
   previewUrl: string | null
+  show_in_dome: boolean
 }
 
 export function AdminDialog({
@@ -23,6 +24,7 @@ export function AdminDialog({
   const [password, setPassword] = useState('')
   const [items, setItems] = useState<ReviewItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [domeSelection, setDomeSelection] = useState<Set<string>>(() => new Set())
   const [publishedItems, setPublishedItems] = useState<ReviewItem[]>([])
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -40,7 +42,7 @@ export function AdminDialog({
     setLoading(true)
     const { data, error } = await client
       .from('memories')
-      .select('id,category,title,note,occurred_at,media_type,media_path,created_at')
+      .select('id,category,title,note,occurred_at,media_type,media_path,created_at,show_in_dome')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
     if (error) {
@@ -57,6 +59,7 @@ export function AdminDialog({
     }))
     setItems(previews)
     setSelectedIds((current) => new Set([...current].filter((id) => previews.some((item) => item.id === id))))
+    setDomeSelection((current) => new Set([...current].filter((id) => previews.some((item) => item.id === id))))
     setLoading(false)
   }, [])
 
@@ -66,7 +69,7 @@ export function AdminDialog({
     setLoading(true)
     const { data, error } = await client
       .from('memories')
-      .select('id,category,title,note,occurred_at,media_type,media_path,created_at')
+      .select('id,category,title,note,occurred_at,media_type,media_path,created_at,show_in_dome')
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
     if (error) {
@@ -152,7 +155,10 @@ export function AdminDialog({
   const updateStatus = async (item: ReviewItem, status: 'approved' | 'rejected') => {
     if (!supabase) return
     setBusy(true)
-    const { error } = await supabase.from('memories').update({ status }).eq('id', item.id)
+    const { error } = await supabase.from('memories').update({
+      status,
+      show_in_dome: status === 'approved' && item.media_type === 'image' && domeSelection.has(item.id),
+    }).eq('id', item.id)
     if (error) setMessage('保存失败，请重试。')
     else {
       setMessage(status === 'approved' ? '这段回忆已经公开啦。' : '投稿已放入拒绝区。')
@@ -184,13 +190,45 @@ export function AdminDialog({
     if (status === 'rejected' && !window.confirm('确定拒绝所选的 ' + ids.length + ' 份投稿吗？')) return
     setBusy(true)
     setMessage('')
-    const { error } = await supabase.from('memories').update({ status }).in('id', ids)
-    if (error) {
-      setMessage('批量审核失败，请重试。')
+    const domeIds = ids.filter((id) => domeSelection.has(id))
+    const regularIds = ids.filter((id) => !domeSelection.has(id))
+    const updates = status === 'approved'
+      ? await Promise.all([
+          ...(domeIds.length ? [supabase.from('memories').update({ status, show_in_dome: true }).in('id', domeIds)] : []),
+          ...(regularIds.length ? [supabase.from('memories').update({ status, show_in_dome: false }).in('id', regularIds)] : []),
+        ])
+      : [await supabase.from('memories').update({ status, show_in_dome: false }).in('id', ids)]
+    if (updates.some((result) => result.error)) {
+      setMessage('批量审核未能全部保存，请刷新列表检查后重试。')
     } else {
       setSelectedIds(new Set())
+      setDomeSelection(new Set())
       setMessage(status === 'approved' ? '已通过 ' + ids.length + ' 份投稿并公开。' : '已拒绝 ' + ids.length + ' 份投稿。')
       await loadQueue()
+      void onChanged()
+    }
+    setBusy(false)
+  }
+
+  const toggleDomeSelection = (id: string) => {
+    setDomeSelection((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const togglePublishedDome = async (item: ReviewItem) => {
+    if (!supabase || item.media_type !== 'image') return
+    const showInDome = !item.show_in_dome
+    setBusy(true)
+    const { error } = await supabase.from('memories').update({ show_in_dome: showInDome }).eq('id', item.id).eq('status', 'approved')
+    if (error) {
+      setMessage('穹顶照片集保存失败，请重试。')
+    } else {
+      setPublishedItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, show_in_dome: showInDome } : entry))
+      setMessage(showInDome ? '已加入穹顶照片集。' : '已从穹顶照片集中移除。')
       void onChanged()
     }
     setBusy(false)
@@ -221,6 +259,7 @@ export function AdminDialog({
     setIsSignedIn(false)
     setItems([])
     setSelectedIds(new Set())
+    setDomeSelection(new Set())
     setPublishedItems([])
     setMessage('已安全退出。')
   }
@@ -233,10 +272,10 @@ export function AdminDialog({
     }}>
       <section className="dialog-panel admin-panel" role="dialog" aria-modal="true" aria-labelledby="admin-title">
         <button className="icon-close" onClick={onClose} aria-label="关闭" disabled={busy}>×</button>
-        <div className="dialog-topline"><span className="dialog-sticker">✿</span><span>OUR LITTLE BACKSTAGE</span></div>
+        <div className="dialog-topline"><span className="dialog-sticker">✿</span><span>OUR LITTLE LOVE ARCHIVE</span></div>
         {!isSignedIn ? (
           <div className="admin-login">
-            <p className="eyebrow">ONLY FOR THE TWO OF YOU</p>
+            <p className="eyebrow">JUST FOR THE TWO OF US</p>
             <h2 id="admin-title">{isRecovery ? '设置新密码' : '管理员登录'}</h2>
             <p className="dialog-intro">{isRecovery ? '请设置一个新密码，然后返回登录。' : '登录后可以审核访客投稿，决定哪些回忆放进公开相册。'}</p>
             {isRecovery ? (
@@ -263,7 +302,7 @@ export function AdminDialog({
           <div className="review-dashboard">
             <div className="review-heading">
               <div>
-                <p className="eyebrow">A SMALL INBOX</p>
+                <p className="eyebrow">MEMORIES TO REVIEW</p>
                 <h2 id="admin-title">待审核投稿</h2>
                 <p>{countText}</p>
               </div>
@@ -285,7 +324,7 @@ export function AdminDialog({
                   <input type="checkbox" checked={items.length > 0 && selectedIds.size === items.length} onChange={toggleSelectAll} disabled={busy} />
                   <span>{selectedIds.size === items.length ? '取消全选' : '全选'}</span>
                 </label>
-                <span className="review-selection-count">已选 {selectedIds.size} 份</span>
+                <span className="review-selection-count">已选 {selectedIds.size} 份 · 可逐项选择是否加入穹顶</span>
                 <div className="review-bulk-actions">
                   <button className="button button-small button-dark" onClick={() => void bulkUpdateStatus('approved')} disabled={busy || selectedIds.size === 0}>批量通过</button>
                   <button className="button button-small button-soft" onClick={() => void bulkUpdateStatus('rejected')} disabled={busy || selectedIds.size === 0}>批量拒绝</button>
@@ -304,6 +343,10 @@ export function AdminDialog({
                             : <span>预览暂不可用</span>}
                       </div>
                       <div className="review-detail">
+                        <label className="review-dome-choice">
+                          <input type="checkbox" checked={domeSelection.has(item.id)} onChange={() => toggleDomeSelection(item.id)} disabled={busy || item.media_type !== 'image'} />
+                          <span>加入穹顶照片集</span>
+                        </label>
                         <label className="review-select">
                           <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelected(item.id)} disabled={busy} />
                           <span>选中这份投稿</span>
@@ -325,7 +368,7 @@ export function AdminDialog({
             )}
             <div className="review-heading" style={{ marginTop: 32 }}>
               <div>
-                <p className="eyebrow">OUR SHARED ALBUM</p>
+                <p className="eyebrow">THE MEMORIES WE SHARE</p>
                 <h2>已公开回忆</h2>
                 <p>{publishedItems.length} 份已公开内容</p>
               </div>
@@ -346,6 +389,10 @@ export function AdminDialog({
                             : <span>预览暂不可用</span>}
                       </div>
                       <div className="review-detail">
+                        <label className="review-dome-choice">
+                          <input type="checkbox" checked={item.show_in_dome} onChange={() => void togglePublishedDome(item)} disabled={busy || item.media_type !== 'image'} />
+                          <span>{item.show_in_dome ? '已加入穹顶照片集' : item.media_type === 'image' ? '加入穹顶照片集' : '穹顶只展示照片'}</span>
+                        </label>
                         <div className="review-meta"><span>{category?.label ?? '回忆'}</span><time>{formatDate(item.occurred_at)}</time></div>
                         <h3>{item.title}</h3>
                         {item.note && <p>{item.note}</p>}
