@@ -8,10 +8,10 @@ import { CATEGORIES } from './types'
 import type { Category, MemoryItem } from './types'
 
 const usagiByCategory: Record<Category, string> = {
-  memories: './usagi/apple-usagi.jpg',
-  portraits: './usagi/peek-usagi.jpg',
-  meetups: './usagi/dancing-usagi.jpg',
-  games: './usagi/mascot.jpg',
+  memories: './usagi/usagi-bouquet.jpg',
+  portraits: './usagi/beautiful-usagi.jpg',
+  meetups: './usagi/meetup-usagi.jpg',
+  games: './usagi/chef-usagi.jpg',
 }
 const usagiDomePreview = [
   './usagi/sunset-usagi.jpg',
@@ -245,7 +245,10 @@ function GallerySection({
         <div className="section-heading">
           <div>
             <p className="eyebrow"><span className="section-index">0{index + 1}</span> {category.eyebrow}</p>
-            <h2>{category.label}<span className="heading-heart" aria-hidden="true">♡</span></h2>
+            <h2 className="section-title-line">
+              <img className={'section-title-usagi usagi-' + category.id} src={usagiByCategory[category.id]} alt="" aria-hidden="true" loading="lazy" />
+              <span>{category.label}</span><span className="heading-heart" aria-hidden="true">♡</span>
+            </h2>
             <p className="section-description">{category.description}</p>
           </div>
           <button className="button button-outline" onClick={onUpload}><span aria-hidden="true">＋</span> 投稿到这里</button>
