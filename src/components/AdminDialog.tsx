@@ -22,6 +22,7 @@ export function AdminDialog({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [items, setItems] = useState<ReviewItem[]>([])
+  const [publishedItems, setPublishedItems] = useState<ReviewItem[]>([])
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -57,6 +58,29 @@ export function AdminDialog({
     setLoading(false)
   }, [])
 
+  const loadPublished = useCallback(async () => {
+    if (!supabase) return
+    const client = supabase
+    setLoading(true)
+    const { data, error } = await client
+      .from('memories')
+      .select('id,category,title,note,occurred_at,media_type,media_path,created_at')
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+    if (error) {
+      setMessage('暂时无法读取已公开的回忆。')
+      setPublishedItems([])
+      setLoading(false)
+      return
+    }
+    const previews = await Promise.all((data ?? []).map(async (item) => {
+      const { data: signed } = await client.storage.from('couple-memories').createSignedUrl(item.media_path, 60 * 60)
+      return { ...item, previewUrl: signed?.signedUrl ?? null } as ReviewItem
+    }))
+    setPublishedItems(previews)
+    setLoading(false)
+  }, [])
+
   const verifySession = useCallback(async () => {
     if (!supabase) return false
     const { data, error } = await supabase.rpc('is_admin')
@@ -68,9 +92,9 @@ export function AdminDialog({
     }
     setIsSignedIn(true)
     setMessage('')
-    await loadQueue()
+    await Promise.all([loadQueue(), loadPublished()])
     return true
-  }, [loadQueue])
+  }, [loadQueue, loadPublished])
 
   useEffect(() => {
     let active = true
@@ -138,6 +162,7 @@ export function AdminDialog({
 
   const removeItem = async (item: ReviewItem) => {
     if (!supabase) return
+    if (!window.confirm('确定删除这段回忆吗？照片或视频和记录都会被永久删除。')) return
     setBusy(true)
     const { error: fileError } = await supabase.storage.from('couple-memories').remove([item.media_path])
     if (fileError) {
@@ -149,7 +174,7 @@ export function AdminDialog({
     if (error) setMessage('记录删除失败，请刷新后检查。')
     else {
       setMessage('投稿和文件都已删除。')
-      await loadQueue()
+      await Promise.all([loadQueue(), loadPublished()])
       void onChanged()
     }
     setBusy(false)
@@ -159,6 +184,7 @@ export function AdminDialog({
     if (supabase) await supabase.auth.signOut()
     setIsSignedIn(false)
     setItems([])
+    setPublishedItems([])
     setMessage('已安全退出。')
   }
 
@@ -236,6 +262,41 @@ export function AdminDialog({
                           <button className="button button-small button-dark" onClick={() => void updateStatus(item, 'approved')} disabled={busy}>通过公开</button>
                           <button className="button button-small button-soft" onClick={() => void updateStatus(item, 'rejected')} disabled={busy}>拒绝</button>
                           <button className="button button-small button-delete" onClick={() => void removeItem(item)} disabled={busy}>删除</button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+            <div className="review-heading" style={{ marginTop: 32 }}>
+              <div>
+                <p className="eyebrow">OUR SHARED ALBUM</p>
+                <h2>已公开回忆</h2>
+                <p>{publishedItems.length} 份已公开内容</p>
+              </div>
+            </div>
+            {publishedItems.length === 0 ? (
+              <div className="review-empty"><strong>还没有公开的回忆</strong><span>审核通过的照片和视频会出现在这里。</span></div>
+            ) : (
+              <div className="review-list">
+                {publishedItems.map((item) => {
+                  const category = CATEGORIES.find((value) => value.id === item.category)
+                  return (
+                    <article className="review-card" key={'published-' + item.id}>
+                      <div className="review-preview">
+                        {item.previewUrl && item.media_type === 'video'
+                          ? <video src={item.previewUrl} controls preload="metadata" />
+                          : item.previewUrl
+                            ? <img src={item.previewUrl} alt={item.title} />
+                            : <span>预览暂不可用</span>}
+                      </div>
+                      <div className="review-detail">
+                        <div className="review-meta"><span>{category?.label ?? '回忆'}</span><time>{formatDate(item.occurred_at)}</time></div>
+                        <h3>{item.title}</h3>
+                        {item.note && <p>{item.note}</p>}
+                        <div className="review-actions">
+                          <button className="button button-small button-delete" onClick={() => void removeItem(item)} disabled={busy}>删除这段回忆</button>
                         </div>
                       </div>
                     </article>
