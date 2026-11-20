@@ -26,7 +26,7 @@ const hashCacheKey = 'our-little-moments-photo-hashes-v1'
 const hashSize = 32
 const hashFrequencies = 8
 const similarDistance = 8
-const existingPhotoLimit = 20
+const existingPhotoLimit = 12
 
 interface DuplicateMatch {
   uploadedName: string
@@ -150,6 +150,10 @@ async function scanSimilarPhotos(
         })
       }
     }
+  }
+
+  if (imageFiles.length === 0) {
+    return { matches, checkedExisting: 0, candidateCount: 0, incomplete }
   }
 
   const candidates = existingPhotos
@@ -387,7 +391,6 @@ export function UploadDialog({
                       skipDuplicateCheck.current = false
                       event.currentTarget.value = ''
                     }}
-                    required
                   />
                   <small className="field-hint">可多选 JPG、PNG、WebP、GIF、MP4 或 WebM；一次最多 10 个，每个不超过 50 MB</small>
                 </div>
