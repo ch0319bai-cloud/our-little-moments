@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { CATEGORIES, type Category } from '../types'
+import { CATEGORIES, type Category, type MemoryItem } from '../types'
 import { isCloudConfigured, supabase, turnstileSiteKey } from '../lib/supabase'
 
 interface TurnstileApi {
@@ -22,13 +22,190 @@ declare global {
 
 const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm']
 const maxBytes = 50 * 1024 * 1024
+const hashCacheKey = 'our-little-moments-photo-hashes-v1'
+const hashSize = 32
+const hashFrequencies = 8
+const similarDistance = 8
+const existingPhotoLimit = 20
+
+interface DuplicateMatch {
+  uploadedName: string
+  matchedName: string
+  matchedId: string
+  distance: number
+  fromExistingAlbum: boolean
+}
+
+interface DuplicateScanResult {
+  matches: DuplicateMatch[]
+  checkedExisting: number
+  candidateCount: number
+  incomplete: boolean
+}
+
+function readHashCache(): Record<string, number[]> {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(hashCacheKey) ?? '{}') as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(value).filter(([, hash]) =>
+        Array.isArray(hash) && hash.length === 63 && hash.every((bit) => bit === 0 || bit === 1),
+      ),
+    ) as Record<string, number[]>
+  } catch {
+    return {}
+  }
+}
+
+function saveHashCache(cache: Record<string, number[]>) {
+  try {
+    window.localStorage.setItem(hashCacheKey, JSON.stringify(cache))
+  } catch {
+    // Similarity checks can continue without a persistent browser cache.
+  }
+}
+
+async function perceptualHash(blob: Blob): Promise<number[]> {
+  const bitmap = await createImageBitmap(blob)
+  const canvas = document.createElement('canvas')
+  canvas.width = hashSize
+  canvas.height = hashSize
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    bitmap.close()
+    throw new Error('Image canvas is unavailable.')
+  }
+  context.drawImage(bitmap, 0, 0, hashSize, hashSize)
+  bitmap.close()
+
+  const pixels = context.getImageData(0, 0, hashSize, hashSize).data
+  const grayscale = new Float64Array(hashSize * hashSize)
+  for (let i = 0; i < grayscale.length; i += 1) {
+    const offset = i * 4
+    grayscale[i] = pixels[offset] * 0.299 + pixels[offset + 1] * 0.587 + pixels[offset + 2] * 0.114
+  }
+
+  const cosine = Array.from({ length: hashFrequencies }, (_, frequency) =>
+    Array.from({ length: hashSize }, (_, pixel) =>
+      Math.cos(((2 * pixel + 1) * frequency * Math.PI) / (2 * hashSize)),
+    ),
+  )
+  const coefficients: number[] = []
+  for (let v = 0; v < hashFrequencies; v += 1) {
+    for (let u = 0; u < hashFrequencies; u += 1) {
+      let total = 0
+      for (let y = 0; y < hashSize; y += 1) {
+        for (let x = 0; x < hashSize; x += 1) {
+          total += grayscale[y * hashSize + x] * cosine[u][x] * cosine[v][y]
+        }
+      }
+      const scaleU = u === 0 ? Math.sqrt(1 / hashSize) : Math.sqrt(2 / hashSize)
+      const scaleV = v === 0 ? Math.sqrt(1 / hashSize) : Math.sqrt(2 / hashSize)
+      coefficients.push(total * scaleU * scaleV)
+    }
+  }
+
+  const sorted = coefficients.slice(1).sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]
+  return coefficients.slice(1).map((value) => value > median ? 1 : 0)
+}
+
+function hashDistance(left: number[], right: number[]) {
+  return left.reduce((distance, bit, index) => distance + (bit === right[index] ? 0 : 1), 0)
+}
+
+async function hashRemotePhoto(url: string, signal: AbortSignal): Promise<number[]> {
+  const response = await fetch(url, { mode: 'cors', cache: 'force-cache', signal })
+  if (!response.ok) throw new Error('Could not read existing photo.')
+  return perceptualHash(await response.blob())
+}
+
+async function scanSimilarPhotos(
+  files: File[],
+  existingPhotos: MemoryItem[],
+  category: Category,
+): Promise<DuplicateScanResult> {
+  const imageFiles = files.filter((file) => file.type.startsWith('image/'))
+  const matches: DuplicateMatch[] = []
+  let incomplete = false
+  const fileHashes: { file: File; hash: number[] }[] = []
+
+  for (const file of imageFiles) {
+    try {
+      fileHashes.push({ file, hash: await perceptualHash(file) })
+    } catch {
+      incomplete = true
+    }
+  }
+
+  for (let i = 0; i < fileHashes.length; i += 1) {
+    for (let j = i + 1; j < fileHashes.length; j += 1) {
+      const distance = hashDistance(fileHashes[i].hash, fileHashes[j].hash)
+      if (distance <= similarDistance) {
+        matches.push({
+          uploadedName: fileHashes[j].file.name,
+          matchedName: fileHashes[i].file.name,
+          matchedId: `batch-${i}-${j}`,
+          distance,
+          fromExistingAlbum: false,
+        })
+      }
+    }
+  }
+
+  const candidates = existingPhotos
+    .filter((entry) => entry.category === category && entry.media_type === 'image')
+    .slice(0, existingPhotoLimit)
+  const hashCache = readHashCache()
+  let nextCandidate = 0
+  let checkedExisting = 0
+  const workers = Array.from({ length: Math.min(3, candidates.length) }, async () => {
+    while (nextCandidate < candidates.length) {
+      const candidate = candidates[nextCandidate]
+      nextCandidate += 1
+      try {
+        let hash = hashCache[candidate.id]
+        if (!hash) {
+          const controller = new AbortController()
+          const timeout = window.setTimeout(() => controller.abort(), 2500)
+          try {
+            hash = await hashRemotePhoto(candidate.media_url, controller.signal)
+          } finally {
+            window.clearTimeout(timeout)
+          }
+          hashCache[candidate.id] = hash
+          saveHashCache(hashCache)
+        }
+        checkedExisting += 1
+        for (const uploaded of fileHashes) {
+          const distance = hashDistance(uploaded.hash, hash)
+          if (distance <= similarDistance) {
+            matches.push({
+              uploadedName: uploaded.file.name,
+              matchedName: candidate.title,
+              matchedId: candidate.id,
+              distance,
+              fromExistingAlbum: true,
+            })
+          }
+        }
+      } catch {
+        incomplete = true
+      }
+    }
+  })
+  await Promise.all(workers)
+
+  return { matches, checkedExisting, candidateCount: candidates.length, incomplete }
+}
 
 export function UploadDialog({
   initialCategory,
+  existingPhotos,
   onClose,
   onSubmitted,
 }: {
   initialCategory: Category
+  existingPhotos: MemoryItem[]
   onClose: () => void
   onSubmitted: () => Promise<void>
 }) {
@@ -42,6 +219,10 @@ export function UploadDialog({
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([])
+  const [duplicateScanIncomplete, setDuplicateScanIncomplete] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const skipDuplicateCheck = useRef(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -73,6 +254,15 @@ export function UploadDialog({
 
     setBusy(true)
     try {
+      const skipSimilarityCheck = skipDuplicateCheck.current
+      skipDuplicateCheck.current = false
+      if (!skipSimilarityCheck) {
+        const scan = await scanSimilarPhotos(files, existingPhotos, category)
+        setDuplicateMatches(scan.matches)
+        setDuplicateScanIncomplete(scan.incomplete && scan.matches.length === 0)
+        if (scan.matches.length || scan.incomplete) return
+      }
+
       const { data: prepared, error: prepareError } = await supabase.functions.invoke('public-submit', {
         body: {
           action: 'prepareBatch',
@@ -110,6 +300,8 @@ export function UploadDialog({
 
       setSuccess(true)
       setFiles([])
+      setDuplicateMatches([])
+      setDuplicateScanIncomplete(false)
       setTurnstileToken('')
       void onSubmitted()
     } catch (error) {
@@ -140,14 +332,19 @@ export function UploadDialog({
           <>
             <h2 id="upload-title">投递一段回忆</h2>
             <p className="dialog-intro">一张照片、一张车票，或一段一起玩的录像，都可以。</p>
-            <form className="memory-form" onSubmit={submit}>
+            <form ref={formRef} className="memory-form" onSubmit={submit}>
               <label className="field-label">放进哪个相册？</label>
               <div className="category-choice">
                 {CATEGORIES.map((item) => (
                   <button
                     type="button"
                     className={category === item.id ? 'category-chip selected' : 'category-chip'}
-                    onClick={() => setCategory(item.id)}
+                    onClick={() => {
+                      setCategory(item.id)
+                      setDuplicateMatches([])
+                      setDuplicateScanIncomplete(false)
+                      skipDuplicateCheck.current = false
+                    }}
                     key={item.id}
                   >
                     {item.label}
@@ -183,7 +380,13 @@ export function UploadDialog({
                     className="visually-hidden"
                     accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"
                     multiple
-                    onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+                    onChange={(event) => {
+                      setFiles(Array.from(event.currentTarget.files ?? []))
+                      setDuplicateMatches([])
+                      setDuplicateScanIncomplete(false)
+                      skipDuplicateCheck.current = false
+                      event.currentTarget.value = ''
+                    }}
                     required
                   />
                   <small className="field-hint">可多选 JPG、PNG、WebP、GIF、MP4 或 WebM；一次最多 10 个，每个不超过 50 MB</small>
@@ -207,10 +410,41 @@ export function UploadDialog({
                   : <p className="setup-hint">安全验证将在网站配置完成后显示。</p>}
               </div>
 
+              {duplicateMatches.length > 0 && <div className="duplicate-warning" role="alert">
+                <strong>发现可能相似的照片，请确认后再提交</strong>
+                <ul>
+                  {duplicateMatches.slice(0, 5).map((match) => (
+                    <li key={match.matchedId + match.uploadedName}>
+                      <span>本次选择：{match.uploadedName}</span>
+                      <span>{match.fromExistingAlbum ? '相册已有：' : '本次选择中：'}{match.matchedName}</span>
+                    </li>
+                  ))}
+                </ul>
+                <small>比对范围：本次选择的照片，以及“{CATEGORIES.find((item) => item.id === category)?.label}”相册最近 {existingPhotoLimit} 张照片。只是提醒，不会自动拦截。</small>
+                <div className="duplicate-warning-actions">
+                  <button type="button" className="button button-small button-soft" onClick={() => {
+                    setFiles([])
+                    setDuplicateMatches([])
+                    setDuplicateScanIncomplete(false)
+                    skipDuplicateCheck.current = false
+                  }}>重新选择</button>
+                  <button type="button" className="button button-small button-dark" onClick={() => {
+                    skipDuplicateCheck.current = true
+                    formRef.current?.requestSubmit()
+                  }}>仍然提交</button>
+                </div>
+              </div>}
+              {duplicateScanIncomplete && <div className="duplicate-incomplete" role="status">
+                部分已有照片暂时无法读取，没能完成完整比对。你可以重新选择文件，或确认后继续提交。
+                <button type="button" className="button button-small button-dark" onClick={() => {
+                  skipDuplicateCheck.current = true
+                  formRef.current?.requestSubmit()
+                }}>确认并继续</button>
+              </div>}
               {errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
               <p className="public-notice"><span aria-hidden="true">♡</span> 投稿通过审核后会公开展示，请不要上传不愿公开的内容。</p>
-              <button className="button button-dark submit-button" type="submit" disabled={busy}>
-                {busy ? <><span className="button-spinner" /> 正在收好这段回忆…</> : <>提交审核 <span aria-hidden="true">↗</span></>}
+              <button className="button button-dark submit-button" type="submit" disabled={busy || duplicateMatches.length > 0 || duplicateScanIncomplete}>
+                {busy ? <><span className="button-spinner" /> 正在检查或上传…</> : <>提交审核 <span aria-hidden="true">↗</span></>}
               </button>
             </form>
           </>
