@@ -254,7 +254,7 @@ function App() {
         </div>
       </footer>
 
-      {uploadCategory && <UploadDialog initialCategory={uploadCategory} onClose={() => setUploadCategory(null)} onSubmitted={loadGallery} />}
+      {uploadCategory && <UploadDialog initialCategory={uploadCategory} existingPhotos={entries.filter((entry) => entry.media_type === 'image')} onClose={() => setUploadCategory(null)} onSubmitted={loadGallery} />}
       {adminOpen && <AdminDialog onClose={closeAdmin} onChanged={loadGallery} recoveryMode={passwordRecovery} onRecoveryComplete={() => setPasswordRecovery(false)} />}
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
