@@ -263,7 +263,7 @@ export function UploadDialog({
       if (!skipSimilarityCheck) {
         const scan = await scanSimilarPhotos(files, existingPhotos, category)
         setDuplicateMatches(scan.matches)
-        setDuplicateScanIncomplete(scan.incomplete && scan.matches.length === 0)
+        setDuplicateScanIncomplete(scan.incomplete)
         if (scan.matches.length || scan.incomplete) return
       }
 
@@ -393,6 +393,7 @@ export function UploadDialog({
                     }}
                   />
                   <small className="field-hint">可多选 JPG、PNG、WebP、GIF、MP4 或 WebM；一次最多 10 个，每个不超过 50 MB</small>
+                  <small className="field-hint">提交前会比对本批照片和该相册最近 12 张已公开照片；发现相似项时由你决定是否继续。</small>
                 </div>
               </div>
 
@@ -414,7 +415,7 @@ export function UploadDialog({
               </div>
 
               {duplicateMatches.length > 0 && <div className="duplicate-warning" role="alert">
-                <strong>发现可能相似的照片，请确认后再提交</strong>
+                <strong>发现 {duplicateMatches.length} 组可能相似的照片，请确认后再提交</strong>
                 <ul>
                   {duplicateMatches.slice(0, 5).map((match) => (
                     <li key={match.matchedId + match.uploadedName}>
