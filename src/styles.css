@@ -45,3 +45,10 @@
 .memory-image-loading{position:absolute;inset:0;background:linear-gradient(110deg,#eee7dc 20%,#f8f4ed 38%,#eee7dc 60%);background-size:200%;animation:shimmer 1.4s infinite linear}
 .memory-image-fallback{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:7px;padding:16px;text-align:center;color:#82766d;background:#f4eee5}
 .memory-image-fallback strong{font-size:11px}.memory-image-fallback small{color:#a19286;font-size:9px}
+
+.duplicate-warning,.duplicate-incomplete{display:grid;gap:10px;padding:13px 14px;border:1px solid #e5b8a8;border-radius:12px;color:#78534c;background:#fff5ef;font-size:10px;line-height:1.65}
+.duplicate-warning>strong{font-size:12px}.duplicate-warning ul{display:grid;gap:6px;margin:0;padding-left:18px}.duplicate-warning li span{display:block}
+.duplicate-warning small{color:#967a70;font-size:9px}.duplicate-warning-actions{display:flex;flex-wrap:wrap;gap:8px}
+.duplicate-warning-actions .button,.duplicate-incomplete .button{min-height:32px}
+.duplicate-incomplete{border-color:#e8d4ad;color:#78643f;background:#fff9eb}
+.duplicate-incomplete .button{justify-self:start}
